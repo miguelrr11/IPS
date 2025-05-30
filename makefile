@@ -1,16 +1,18 @@
 CC = gcc
-CFLAGS = -std=c11 -Wall -Wextra
-LDFLAGS_CLIENT = -pthread
+CFLAGS = -Wall -std=c11
+LDFLAGS = -lws2_32
 
-all: server client
+SRC = common.h server.c client.c
 
-server: server.c common.h
-	$(CC) $(CFLAGS) -o $@ server.c
+all: server.exe client.exe
 
-client: client.c common.h
-	$(CC) $(CFLAGS) $(LDFLAGS_CLIENT) -o $@ client.c
+server.exe: server.c common.h
+	$(CC) $(CFLAGS) -o $@ server.c $(LDFLAGS)
+
+client.exe: client.c common.h
+	$(CC) $(CFLAGS) -o $@ client.c $(LDFLAGS)
 
 clean:
-	rm -f server client
+	del /Q server.exe client.exe 2>nul || exit 0
 
 .PHONY: all clean
