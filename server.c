@@ -14,14 +14,14 @@ struct client {
 
 int main(int argc, char *argv[]) {
     if (argc > 1) {
-        fprintf(stderr, "No arguments expected\n");
+        fprintf(stderr, "Demasiados argumentos\n");
         return EXIT_FAILURE;
     }
 
     // Inicializar Winsock
     WSADATA wsa;
     if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
-        fprintf(stderr, "Failed to initialize Winsock.\n");
+        fprintf(stderr, "Error al inicializar Winsock.\n");
         return EXIT_FAILURE;
     }
 
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     SOCKET sock_reg = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     SOCKET sock_data = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock_reg == INVALID_SOCKET || sock_data == INVALID_SOCKET) {
-        fprintf(stderr, "Socket creation failed: %d\n", WSAGetLastError());
+        fprintf(stderr, "Error al crear socket: %d\n", WSAGetLastError());
         WSACleanup();
         return EXIT_FAILURE;
     }
@@ -46,14 +46,14 @@ int main(int argc, char *argv[]) {
     srv_data.sin_port = htons(data_port);
 
     if (bind(sock_reg, (struct sockaddr*)&srv_reg, sizeof(srv_reg)) == SOCKET_ERROR) {
-        fprintf(stderr, "bind(reg) failed: %d\n", WSAGetLastError());
+        fprintf(stderr, "Error en bind(reg): %d\n", WSAGetLastError());
         closesocket(sock_reg);
         closesocket(sock_data);
         WSACleanup();
         return EXIT_FAILURE;
     }
     if (bind(sock_data, (struct sockaddr*)&srv_data, sizeof(srv_data)) == SOCKET_ERROR) {
-        fprintf(stderr, "bind(data) failed: %d\n", WSAGetLastError());
+        fprintf(stderr, "Error en bind(data): %d\n", WSAGetLastError());
         closesocket(sock_reg);
         closesocket(sock_data);
         WSACleanup();
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
     struct client clients[MAX_CLIENTS];
     int client_count = 0;
 
-    printf("Server running on ports %d (reg) and %d (data)\n", reg_port, data_port);
+    printf("Servidor operativo en los puertos %d (reg) y %d (data)\n", reg_port, data_port);
 
     fd_set readfds;
     SOCKET maxfd = (sock_reg > sock_data ? sock_reg : sock_data);
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
         FD_SET(sock_data, &readfds);
 
         if (select((int)maxfd+1, &readfds, NULL, NULL, NULL) == SOCKET_ERROR) {
-            fprintf(stderr, "select failed: %d\n", WSAGetLastError());
+            fprintf(stderr, "Error en select: %d\n", WSAGetLastError());
             break;
         }
 
@@ -93,14 +93,24 @@ int main(int argc, char *argv[]) {
                     if (nick_len > 0 && nick_len < MAX_MSG_LEN) {
                         memcpy(nickname, buffer + sizeof(reg_pkt_t), nick_len);
                         nickname[nick_len] = '\0';
+
+                        // Cortar en el primer espacio, si lo hay
+                        char* space = strchr(nickname, ' ');
+                        if (space) *space = '\0';
                     }
+
 
                     if (client_count < MAX_CLIENTS) {
                         clients[client_count].addr = cli_addr;
                         clients[client_count].addr.sin_port = pkt->port;
                         strncpy(clients[client_count].nickname, nickname, MAX_MSG_LEN);
-                        printf("[DEBUG] Registered client %s:%d as '%s' (total: %d)\n",
-                               inet_ntoa(cli_addr.sin_addr), ntohs(pkt->port), nickname, client_count+1);
+                        printf("[DEBUG] Usuario registrado %s recv_port=%d send_port=%d como '%s' (total: %d)\n",
+                            inet_ntoa(cli_addr.sin_addr),
+                            ntohs(pkt->port),
+                            ntohs(pkt->port) + 1,
+                            nickname,
+                            client_count + 1);
+
                         client_count++;
                     }
                 }
@@ -175,7 +185,7 @@ int main(int argc, char *argv[]) {
                     }
 
                     if (!sent) {
-                        printf("[INFO] Nickname '%s' not found. Message dropped.\n", dst_nick);
+                        printf("[INFO] Nickname '%s' no encontrado. Mensage descartado.\n", dst_nick);
                     }
 
                     free(out_pkt);

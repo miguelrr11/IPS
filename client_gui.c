@@ -78,7 +78,7 @@ void iniciar_conexion(HWND hwnd) {
 
     sock_recv = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock_recv == INVALID_SOCKET) {
-        MessageBox(hwnd, "Socket recv failed", "Error", MB_ICONERROR);
+        MessageBox(hwnd, "Error socket recv", "Error", MB_ICONERROR);
         return;
     }
 
@@ -87,7 +87,7 @@ void iniciar_conexion(HWND hwnd) {
     cli_recv.sin_addr.s_addr = INADDR_ANY;
     cli_recv.sin_port = htons(0);
     if (bind(sock_recv, (struct sockaddr*)&cli_recv, sizeof(cli_recv)) == SOCKET_ERROR) {
-        MessageBox(hwnd, "Bind recv failed", "Error", MB_ICONERROR);
+        MessageBox(hwnd, "Error bind(recv)", "Error", MB_ICONERROR);
         return;
     }
 
@@ -97,14 +97,14 @@ void iniciar_conexion(HWND hwnd) {
 
     sock_send = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock_send == INVALID_SOCKET) {
-        MessageBox(hwnd, "Socket send failed", "Error", MB_ICONERROR);
+        MessageBox(hwnd, "Error socket send", "Error", MB_ICONERROR);
         return;
     }
 
     struct sockaddr_in cli_send = cli_recv;
     cli_send.sin_port = htons(recv_port + 1);
     if (bind(sock_send, (struct sockaddr*)&cli_send, sizeof(cli_send)) == SOCKET_ERROR) {
-        MessageBox(hwnd, "Bind send failed", "Error", MB_ICONERROR);
+        MessageBox(hwnd, "Error bind(send)", "Error", MB_ICONERROR);
         return;
     }
 
@@ -212,6 +212,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         case WM_COMMAND:
             if (LOWORD(wParam) == ID_BTN_REG) {
                 GetWindowText(GetDlgItem(hwnd, ID_NICK), nickname, MAX_MSG_LEN);
+                nickname[MAX_MSG_LEN - 1] = '\0';
+                char *space = strchr(nickname, ' ');
+                if (space) *space = '\0';
                 iniciar_conexion(hwnd);
                 EnableWindow(GetDlgItem(hwnd, ID_BTN_REG), FALSE);
             } else if (LOWORD(wParam) == ID_BTN_SEND) {
@@ -232,6 +235,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+//creacion de ventana
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args, int nCmdShow) {
     WNDCLASS wc = {0};
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
