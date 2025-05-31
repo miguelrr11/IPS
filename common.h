@@ -11,7 +11,8 @@ enum {
     MSG_TYPE_REG   = 1,
     MSG_TYPE_CHAT  = 2,
     MSG_TYPE_BROAD = 3,
-    MSG_TYPE_ACK   = 4
+    MSG_TYPE_ACK   = 4,
+    MSG_TYPE_PRIV  = 5
 };
 
 #pragma pack(push,1)

@@ -1,4 +1,3 @@
-// client_gui.c
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +33,7 @@ LRESULT CALLBACK NickProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         text[strcspn(text, "\r\n")] = 0;
         SetWindowText(hwnd, text);
         SendMessage(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(ID_BTN_REG, BN_CLICKED), 0);
-        return 0; // evitar el beep
+        return 0;
     }
     return CallWindowProc(orig_nick_proc, hwnd, msg, wParam, lParam);
 }
@@ -51,17 +50,16 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProc(orig_msg_proc, hwnd, msg, wParam, lParam);
 }
 
-
 DWORD WINAPI recv_thread(LPVOID arg) {
-    char buffer[sizeof(broad_pkt_t)+MAX_MSG_LEN];
+    char buffer[sizeof(broad_pkt_t) + MAX_MSG_LEN];
     while (1) {
         struct sockaddr_in src;
         int addrlen = sizeof(src);
         int n = recvfrom(sock_recv, buffer, sizeof(buffer), 0,
                          (struct sockaddr*)&src, &addrlen);
         if (n >= sizeof(broad_pkt_t)) {
-            broad_pkt_t *b = (broad_pkt_t*)buffer;
-            if (ntohs(b->type)==MSG_TYPE_BROAD) {
+            broad_pkt_t* b = (broad_pkt_t*)buffer;
+            if (ntohs(b->type) == MSG_TYPE_BROAD) {
                 int msg_len = ntohs(b->length);
                 char out[MAX_MSG_LEN + 2];
                 snprintf(out, sizeof(out), "%.*s\r\n", msg_len, b->text);
@@ -104,7 +102,7 @@ void iniciar_conexion(HWND hwnd) {
     }
 
     struct sockaddr_in cli_send = cli_recv;
-    cli_send.sin_port = htons(recv_port+1);
+    cli_send.sin_port = htons(recv_port + 1);
     if (bind(sock_send, (struct sockaddr*)&cli_send, sizeof(cli_send)) == SOCKET_ERROR) {
         MessageBox(hwnd, "Bind send failed", "Error", MB_ICONERROR);
         return;
@@ -114,9 +112,18 @@ void iniciar_conexion(HWND hwnd) {
     srv_reg.sin_family = AF_INET;
     srv_reg.sin_port = htons(reg_port);
     inet_pton(AF_INET, server_ip, &srv_reg.sin_addr);
-    reg_pkt_t regp = {htons(MSG_TYPE_REG), htons(recv_port)};
-    sendto(sock_send, (char*)&regp, sizeof(regp), 0,
-           (struct sockaddr*)&srv_reg, sizeof(srv_reg));
+
+    // Enviar nickname con el registro
+    size_t nick_len = strlen(nickname) + 1;
+    size_t reg_len = sizeof(reg_pkt_t) + nick_len;
+    char* reg_buf = malloc(reg_len);
+    reg_pkt_t* regp = (reg_pkt_t*)reg_buf;
+    regp->type = htons(MSG_TYPE_REG);
+    regp->port = htons(recv_port);
+    memcpy(reg_buf + sizeof(reg_pkt_t), nickname, nick_len);
+    sendto(sock_send, reg_buf, (int)reg_len, 0, (struct sockaddr*)&srv_reg, sizeof(srv_reg));
+    free(reg_buf);
+
 
     srv_data.sin_family = AF_INET;
     srv_data.sin_port = htons(data_port);
@@ -132,20 +139,56 @@ void enviar_mensaje(HWND hwnd) {
 
     char msg[MAX_MSG_LEN] = {0};
     GetWindowText(hwndMsg, msg, MAX_MSG_LEN);
-    char full[MAX_MSG_LEN];
-    int flen = snprintf(full, MAX_MSG_LEN, "[%s] %s", nickname, msg);
-    chat_pkt_t *chat = (chat_pkt_t*)malloc(sizeof(chat_pkt_t)+flen);
-    chat->type = htons(MSG_TYPE_CHAT);
-    chat->length = htons(flen);
-    memcpy(chat->text, full, flen);
-    sendto(sock_send, (char*)chat, sizeof(chat_pkt_t)+flen, 0,
+    SetWindowText(hwndMsg, "");
+
+    chat_pkt_t* chat;
+    int flen;
+
+    if (strncmp(msg, "/msg ", 5) == 0) {
+        char* space = strchr(msg + 5, ' ');
+        if (space) {
+            *space = '\0';
+            char* destino = msg + 5;
+            char* contenido = space + 1;
+
+            char priv_fmt[MAX_MSG_LEN];
+            snprintf(priv_fmt, sizeof(priv_fmt), "[%s -> %s] %s", nickname, destino, contenido);
+
+            HWND hwndOut = GetDlgItem(hwnd, ID_CHAT_OUT);
+            append_text(hwndOut, priv_fmt);
+            append_text(hwndOut, "\r\n");
+
+            char internal[MAX_MSG_LEN];
+            snprintf(internal, sizeof(internal), "%s:%s", destino, priv_fmt);
+
+            flen = strlen(internal);
+            chat = (chat_pkt_t*)malloc(sizeof(chat_pkt_t) + flen);
+            chat->type = htons(MSG_TYPE_PRIV);
+            chat->length = htons(flen);
+            memcpy(chat->text, internal, flen);
+            chat->text[flen] = '\0';
+
+        } else {
+            return; // formato inválido
+        }
+    } else {
+        char full[MAX_MSG_LEN];
+        flen = snprintf(full, MAX_MSG_LEN, "[%s] %s", nickname, msg);
+        chat = (chat_pkt_t*)malloc(sizeof(chat_pkt_t) + flen);
+        chat->type = htons(MSG_TYPE_CHAT);
+        chat->length = htons(flen);
+        memcpy(chat->text, full, flen);
+        chat->text[flen] = '\0';
+
+    }
+
+    sendto(sock_send, (char*)chat, sizeof(chat_pkt_t) + flen, 0,
            (struct sockaddr*)&srv_data, sizeof(srv_data));
     free(chat);
-    SetWindowText(hwndMsg, "");
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    switch(msg) {
+    switch (msg) {
         case WM_CREATE: {
             CreateWindow("edit", "", WS_CHILD | WS_VISIBLE | WS_BORDER, 10, 10, 200, 25,
                          hwnd, (HMENU)ID_NICK, NULL, NULL);
@@ -159,7 +202,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             CreateWindow("button", "Enviar", WS_CHILD | WS_VISIBLE, 260, 360, 60, 25,
                          hwnd, (HMENU)ID_BTN_SEND, NULL, NULL);
 
-            // Subclasificar los campos de entrada
             HWND hwndNick = GetDlgItem(hwnd, ID_NICK);
             HWND hwndMsg  = GetDlgItem(hwnd, ID_MSG_IN);
             orig_nick_proc = (WNDPROC)SetWindowLongPtr(hwndNick, GWLP_WNDPROC, (LONG_PTR)NickProc);

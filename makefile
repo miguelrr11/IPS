@@ -13,9 +13,9 @@ client.exe: client.c common.h
 	$(CC) $(CFLAGS) -o $@ client.c $(LDFLAGS)
 
 client_gui.exe: client_gui.c common.h
-	$(CC) $(CFLAGS) -o $@ client_gui.c $(LDFLAGS)
+	$(CC) $(CFLAGS) -mwindows -o $@ client_gui.c $(LDFLAGS)
 
 clean:
-	del /Q server.exe client.exe 2>nul || exit 0
+	del /Q server.exe client.exe client_gui.exe 2>nul || exit 0
 
 .PHONY: all clean
