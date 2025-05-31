@@ -28,6 +28,7 @@ int main(int argc, char *argv[]) {
     int reg_port = 9000;
     int data_port = 9001;
 
+    // Creamos sockets
     SOCKET sock_reg = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     SOCKET sock_data = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock_reg == INVALID_SOCKET || sock_data == INVALID_SOCKET) {
@@ -35,7 +36,6 @@ int main(int argc, char *argv[]) {
         WSACleanup();
         return EXIT_FAILURE;
     }
-
     struct sockaddr_in srv_reg = {0}, srv_data = {0};
     srv_reg.sin_family = AF_INET;
     srv_reg.sin_addr.s_addr = INADDR_ANY;
@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
     srv_data.sin_addr.s_addr = INADDR_ANY;
     srv_data.sin_port = htons(data_port);
 
+    // Vinculamos sockets
     if (bind(sock_reg, (struct sockaddr*)&srv_reg, sizeof(srv_reg)) == SOCKET_ERROR) {
         fprintf(stderr, "Error en bind(reg): %d\n", WSAGetLastError());
         closesocket(sock_reg);
@@ -60,6 +61,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    // Inicializamos lista de clientes
     struct client clients[MAX_CLIENTS];
     int client_count = 0;
 
@@ -68,6 +70,7 @@ int main(int argc, char *argv[]) {
     fd_set readfds;
     SOCKET maxfd = (sock_reg > sock_data ? sock_reg : sock_data);
 
+    // Bucle principal
     while (1) {
         FD_ZERO(&readfds);
         FD_SET(sock_reg, &readfds);
@@ -78,28 +81,34 @@ int main(int argc, char *argv[]) {
             break;
         }
 
+        // Gestion de registro de clientes
         if (FD_ISSET(sock_reg, &readfds)) {
+            // Buffer para el nombre del usuario
             char buffer[sizeof(reg_pkt_t) + MAX_MSG_LEN];
             struct sockaddr_in cli_addr;
             int addrlen = sizeof(cli_addr);
+
+            // Recibimos el nombre
             int n = recvfrom(sock_reg, buffer, sizeof(buffer), 0,
                              (struct sockaddr*)&cli_addr, &addrlen);
 
             if (n >= sizeof(reg_pkt_t)) {
                 reg_pkt_t *pkt = (reg_pkt_t*)buffer;
+
+                // Verificamos que el paquete sea de tipo registro
                 if (ntohs(pkt->type) == MSG_TYPE_REG) {
                     char nickname[MAX_MSG_LEN] = "anon";
                     int nick_len = n - sizeof(reg_pkt_t);
+
+                    // Extraemos el nombre y nos quedamos con la primera palabra
                     if (nick_len > 0 && nick_len < MAX_MSG_LEN) {
                         memcpy(nickname, buffer + sizeof(reg_pkt_t), nick_len);
                         nickname[nick_len] = '\0';
-
-                        // Cortar en el primer espacio, si lo hay
                         char* space = strchr(nickname, ' ');
                         if (space) *space = '\0';
                     }
 
-
+                    // Añadimos el cliente a la lista
                     if (client_count < MAX_CLIENTS) {
                         clients[client_count].addr = cli_addr;
                         clients[client_count].addr.sin_port = pkt->port;
@@ -117,22 +126,30 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // Gestion de mensajes
         if (FD_ISSET(sock_data, &readfds)) {
             char buffer[sizeof(chat_pkt_t)+MAX_MSG_LEN];
             struct sockaddr_in src_addr;
             int addrlen = sizeof(src_addr);
+
+            // Recibimos mensaje
             int n = recvfrom(sock_data, buffer, sizeof(buffer), 0,
                              (struct sockaddr*)&src_addr, &addrlen);
+
             if (n >= sizeof(chat_pkt_t)) {
                 chat_pkt_t *chat = (chat_pkt_t*)buffer;
                 uint16_t msg_type = ntohs(chat->type);
 
+                // Mensaje publico
                 if (msg_type == MSG_TYPE_CHAT) {
                     uint16_t msg_len = ntohs(chat->length);
                     ack_pkt_t ack = { htons(MSG_TYPE_ACK) };
+
+                    // Mandamos ACK
                     sendto(sock_data, (char*)&ack, sizeof(ack), 0,
                            (struct sockaddr*)&src_addr, addrlen);
 
+                    // Preparamos paquete de difusion
                     size_t pkt_size = sizeof(broad_pkt_t) + msg_len;
                     char *out_pkt = (char*)malloc(pkt_size);
                     broad_pkt_t *broad = (broad_pkt_t*)out_pkt;
@@ -140,6 +157,7 @@ int main(int argc, char *argv[]) {
                     broad->length = htons(msg_len);
                     memcpy(broad->text, chat->text, msg_len);
 
+                    // Enviamos el mensaje a todos los clientes
                     for (int i = 0; i < client_count; i++) {
                         sendto(sock_data, out_pkt, (int)pkt_size, 0,
                                (struct sockaddr*)&clients[i].addr, sizeof(clients[i].addr));
@@ -147,9 +165,12 @@ int main(int argc, char *argv[]) {
                     free(out_pkt);
                 }
 
+                // Mensaje privado
                 else if (msg_type == MSG_TYPE_PRIV) {
                     uint16_t msg_len = ntohs(chat->length);
                     ack_pkt_t ack = { htons(MSG_TYPE_ACK) };
+
+                    // Mandamos ACK 
                     sendto(sock_data, (char*)&ack, sizeof(ack), 0,
                            (struct sockaddr*)&src_addr, addrlen);
 
@@ -167,6 +188,7 @@ int main(int argc, char *argv[]) {
                     const char *msg_text = sep + 1;
                     size_t final_len = strlen(msg_text);
 
+                    // Preparamos paquete de broadcast
                     size_t pkt_size = sizeof(broad_pkt_t) + final_len;
                     char *out_pkt = (char*)malloc(pkt_size);
                     broad_pkt_t *broad = (broad_pkt_t*)out_pkt;
@@ -174,6 +196,7 @@ int main(int argc, char *argv[]) {
                     broad->length = htons((uint16_t)final_len);
                     memcpy(broad->text, msg_text, final_len);
 
+                    // Enviamos mensaje solo al destinatario
                     int sent = 0;
                     for (int i = 0; i < client_count; i++) {
                         if (strcmp(clients[i].nickname, dst_nick) == 0) {
@@ -184,6 +207,7 @@ int main(int argc, char *argv[]) {
                         }
                     }
 
+                    // Si no se encuentra el cliente, se notifica y se descarta
                     if (!sent) {
                         printf("[INFO] Nickname '%s' no encontrado. Mensage descartado.\n", dst_nick);
                     }

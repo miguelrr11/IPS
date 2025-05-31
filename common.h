@@ -22,14 +22,14 @@ typedef struct {
     uint16_t port;   // puerto de recepción del cliente (net-order)
 } reg_pkt_t;
 
-// Paquete de chat (cliente → servidor)
+// Paquete de chat (cliente -> servidor)
 typedef struct {
     uint16_t type;       // = MSG_TYPE_CHAT
     uint16_t length;     // longitud del texto (net-order)
     char     text[];     // datos UTF-8
 } chat_pkt_t;
 
-// Paquete de difusión (servidor → cliente)
+// Paquete de difusión (servidor -> cliente)
 typedef struct {
     uint16_t type;       // = MSG_TYPE_BROAD
     uint16_t length;     // longitud del texto (net-order)

@@ -8,6 +8,7 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
+// IDs para el GUI
 #define ID_NICK     101
 #define ID_BTN_REG  102
 #define ID_MSG_IN   103
@@ -20,12 +21,14 @@ char nickname[MAX_MSG_LEN] = "Usuario";
 
 WNDPROC orig_nick_proc, orig_msg_proc;
 
+// Funcion auxiliar para añadir texto al chat
 void append_text(HWND hwnd, const char* msg) {
     int len = GetWindowTextLength(hwnd);
     SendMessage(hwnd, EM_SETSEL, (WPARAM)len, (LPARAM)len);
     SendMessage(hwnd, EM_REPLACESEL, 0, (LPARAM)msg);
 }
 
+// Cuando se pulsa ENTER en el campo del nick, se simula click en Registrar
 LRESULT CALLBACK NickProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_KEYDOWN && wParam == VK_RETURN) {
         char text[MAX_MSG_LEN];
@@ -38,6 +41,7 @@ LRESULT CALLBACK NickProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProc(orig_nick_proc, hwnd, msg, wParam, lParam);
 }
 
+// Cuando se pulsa ENTER en el campo del mensaje, se simula click en Enviar
 LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_KEYDOWN && wParam == VK_RETURN) {
         char text[MAX_MSG_LEN];
@@ -50,6 +54,7 @@ LRESULT CALLBACK MsgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return CallWindowProc(orig_msg_proc, hwnd, msg, wParam, lParam);
 }
 
+// Recibe mensajes del servidor y los muestra 
 DWORD WINAPI recv_thread(LPVOID arg) {
     char buffer[sizeof(broad_pkt_t) + MAX_MSG_LEN];
     while (1) {
@@ -71,6 +76,8 @@ DWORD WINAPI recv_thread(LPVOID arg) {
     return 0;
 }
 
+// Crea sockets, los vincula y envia mensaje de registro al servidor
+// Luego inicia el hilo receptor
 void iniciar_conexion(HWND hwnd) {
     const char* server_ip = "127.0.0.1";
     int reg_port = 9000;
@@ -132,6 +139,8 @@ void iniciar_conexion(HWND hwnd) {
     CreateThread(NULL, 0, recv_thread, hwnd, 0, NULL);
 }
 
+// Si no empieza con /msg, se envia publicamente
+// Si empieza con /msg, se envia privado
 void enviar_mensaje(HWND hwnd) {
     HWND hwndMsg = GetDlgItem(hwnd, ID_MSG_IN);
     int len = GetWindowTextLength(hwndMsg);
@@ -189,6 +198,8 @@ void enviar_mensaje(HWND hwnd) {
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+
+        // Crea los controles GUI
         case WM_CREATE: {
             CreateWindow("edit", "", WS_CHILD | WS_VISIBLE | WS_BORDER, 10, 10, 200, 25,
                          hwnd, (HMENU)ID_NICK, NULL, NULL);
@@ -209,6 +220,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             break;
         }
 
+        //Registro usuario, envio mensaje
         case WM_COMMAND:
             if (LOWORD(wParam) == ID_BTN_REG) {
                 GetWindowText(GetDlgItem(hwnd, ID_NICK), nickname, MAX_MSG_LEN);
@@ -222,6 +234,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
             break;
 
+        // Cierra aplicacion y sockets
         case WM_DESTROY:
             closesocket(sock_send);
             closesocket(sock_recv);
@@ -235,7 +248,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-//creacion de ventana
+// Creacion de ventana
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR args, int nCmdShow) {
     WNDCLASS wc = {0};
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
